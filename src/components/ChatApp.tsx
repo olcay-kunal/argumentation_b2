@@ -22,6 +22,8 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
   const [themeChosen, setThemeChosen] = useState(false);
   const [localInput, setLocalInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<{ content: string, allMessages: Message[] } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -59,6 +61,15 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
       });
 
       if (!res.ok) {
+        if (res.status === 429 || res.status === 503) {
+          setRetryCountdown(60);
+          setPendingRequest({ content, allMessages });
+          setMessages(prev => prev.map(m =>
+            m.id === assistantId ? { ...m, content: `⏳ Limite d'utilisation de l'IA atteinte. Reprise automatique dans 60 secondes...` } : m
+          ));
+          return;
+        }
+
         const err = await res.json();
         setMessages(prev => prev.map(m =>
           m.id === assistantId ? { ...m, content: `❌ Erreur: ${err.error || 'Inconnue'}` } : m
@@ -105,15 +116,46 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
     }
   }, [apiKey]);
 
+  /* Rate Limit Countdown */
+  useEffect(() => {
+    if (retryCountdown === null) return;
+    if (retryCountdown > 0) {
+      const timer = setTimeout(() => {
+        const nextVal = retryCountdown - 1;
+        setRetryCountdown(nextVal);
+        setMessages(prev => {
+          const newMsg = [...prev];
+          const lastMsg = newMsg[newMsg.length - 1];
+          if (lastMsg.role === 'assistant' && lastMsg.content.includes("Reprise automatique")) {
+            newMsg[newMsg.length - 1] = { 
+              ...lastMsg, 
+              content: `⏳ Limite d'utilisation de l'IA atteinte. Reprise automatique dans ${nextVal} secondes...` 
+            };
+          }
+          return newMsg;
+        });
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setRetryCountdown(null);
+      if (pendingRequest) {
+        setMessages(prev => prev.slice(0, -1));
+        const req = pendingRequest;
+        setPendingRequest(null);
+        doSend(req.content, req.allMessages);
+      }
+    }
+  }, [retryCountdown, pendingRequest, doSend]);
+
   /* Send from textarea */
   const sendMessage = useCallback(async (content: string) => {
-    if (!content.trim() || isLoading) return;
+    if (!content.trim() || isLoading || retryCountdown !== null) return;
     const userMsg: Message = { id: `u-${Date.now()}`, role: 'user', content };
     const allMessages = [...messages, userMsg];
     setMessages(allMessages);
     setLocalInput('');
     await doSend(content, allMessages);
-  }, [messages, isLoading, doSend]);
+  }, [messages, isLoading, retryCountdown, doSend]);
 
   /* Called by ThemeSelector */
   const handleThemeSelect = useCallback((theme: string) => {
@@ -188,8 +230,9 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
             className="chat-input"
             value={localInput}
             onChange={(e) => setLocalInput(e.target.value)}
-            placeholder={themeChosen ? 'Écrivez votre réponse ici...' : 'Ou écrivez directement votre thème...'}
+            placeholder={retryCountdown !== null ? 'Veuillez patienter...' : (themeChosen ? 'Écrivez votre réponse ici...' : 'Ou écrivez directement votre thème...')}
             rows={1}
+            disabled={retryCountdown !== null}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -203,7 +246,7 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
           <button
             type="button"
             className="btn-send"
-            disabled={isLoading || !localInput?.trim()}
+            disabled={isLoading || retryCountdown !== null || !localInput?.trim()}
             onClick={() => {
               if (localInput.trim()) {
                 setThemeChosen(true);
