@@ -180,7 +180,7 @@ export async function POST(req: Request) {
     const models = [
       "gemini-3.1-flash-lite-preview",
       "gemini-2.5-flash-lite",
-      "gemma-4-31b-it"
+      "gemma-4-26b-a4b-it"
     ];
 
     let geminiRes;
