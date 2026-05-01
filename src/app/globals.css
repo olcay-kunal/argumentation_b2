@@ -61,6 +61,33 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
+  transition: max-width 0.5s ease;
+}
+
+.app-container.split-mode {
+  max-width: 1400px;
+}
+
+.layout-split {
+  flex: 1;
+  display: flex;
+  gap: 1.5rem;
+  overflow: hidden;
+}
+
+.chat-section {
+  flex: 6;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.mindmap-section {
+  flex: 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .main-content {
@@ -459,4 +486,139 @@ body {
 
 @keyframes blink {
   50% { opacity: 0; }
+}
+
+/* MindMap Components */
+.mindmap-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mindmap-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.mindmap-header h3 {
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin: 0;
+  background: linear-gradient(90deg, #fff, #9ba1b0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.mindmap-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background: rgba(0,0,0,0.1);
+}
+
+.mindmap-content::-webkit-scrollbar {
+  width: 6px;
+}
+.mindmap-content::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.1);
+  border-radius: 10px;
+}
+
+.mindmap-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+.btn-small {
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+
+/* MindMap Tree CSS */
+.mm-tree {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.mm-node {
+  background: var(--bg-panel);
+  border: 1px solid rgba(67, 97, 238, 0.3);
+  padding: 1rem;
+  border-radius: 12px;
+  text-align: center;
+  min-width: 200px;
+  max-width: 90%;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+  position: relative;
+  animation: fadeIn 0.4s ease forwards;
+}
+
+.mm-theme { border-color: #4361ee; box-shadow: 0 0 10px rgba(67,97,238,0.2); }
+.mm-sujet { border-color: #f72585; box-shadow: 0 0 10px rgba(247,37,133,0.2); }
+.mm-problematique { border-color: #4cc9f0; box-shadow: 0 0 10px rgba(76,201,240,0.2); }
+.mm-plan-type { border-color: #7209b7; box-shadow: 0 0 10px rgba(114,9,183,0.2); font-weight: 600; }
+.mm-argument { border-color: #fca311; font-size: 0.85rem; padding: 0.75rem; min-width: 150px; }
+
+.mm-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  letter-spacing: 1px;
+}
+
+.mm-node p {
+  font-size: 0.95rem;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.mm-line {
+  width: 2px;
+  height: 20px;
+  background: var(--border-glass);
+}
+
+.mm-line-vertical {
+  width: 2px;
+  height: 20px;
+  background: var(--border-glass);
+  margin: 0 auto;
+}
+
+.mm-branches {
+  display: flex;
+  gap: 1.5rem;
+  width: 100%;
+  justify-content: center;
+  position: relative;
+  align-items: flex-start;
+}
+
+.mm-branch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.mm-arguments {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
 }

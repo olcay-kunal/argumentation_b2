@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Message } from '../utils/constants';
 import ThemeSelector from './ThemeSelector';
+import MindMap, { MindMapData } from './MindMap';
 
 interface ChatAppProps {
   apiKey: string;
@@ -24,6 +25,8 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [retryCountdown, setRetryCountdown] = useState<number | null>(null);
   const [pendingRequest, setPendingRequest] = useState<{ content: string, allMessages: Message[] } | null>(null);
+  const [activeModel, setActiveModel] = useState<string>('');
+  const [mindMapData, setMindMapData] = useState<MindMapData>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,6 +44,26 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
     ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
     ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden';
   }, [localInput]);
+
+  /* Parse MindMap JSON */
+  useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant') {
+        const mindmapRegex = /```json:mindmap\s*({[\s\S]*?})\s*```/;
+        const match = mindmapRegex.exec(msg.content);
+        if (match && match[1]) {
+          try {
+            const parsedMap = JSON.parse(match[1]);
+            setMindMapData(parsedMap);
+            break;
+          } catch {
+            // silent parsing error
+          }
+        }
+      }
+    }
+  }, [messages]);
 
   /* Core send */
   const doSend = useCallback(async (content: string, allMessages: Message[]) => {
@@ -95,6 +118,9 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
             if (data === '[DONE]') continue;
             try {
               const parsed = JSON.parse(data);
+              if (parsed.model) {
+                setActiveModel(parsed.model);
+              }
               if (parsed.text) {
                 accumulated += parsed.text;
                 setMessages(prev => prev.map(m =>
@@ -170,10 +196,33 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
     sendMessage("[SYSTEM_CMD_EXPORT] S'il te plaît, rédige le compte-rendu complet (Étape 4) de ce que nous avons fait jusqu'à présent.");
   };
 
-  const visibleMessages = messages.filter(m => !m.content.includes('[SYSTEM_CMD_EXPORT]'));
+  const visibleMessages = messages.map(m => {
+    if (m.content.includes('[SYSTEM_CMD_EXPORT]')) return null;
+
+    let displayContent = m.content;
+    const mindmapRegex = /```json:mindmap([\s\S]*?)```/g;
+    const match = mindmapRegex.exec(m.content);
+    
+    if (match) {
+      displayContent = m.content.replace(mindmapRegex, '').trim();
+    } else {
+      const partialIndex = m.content.indexOf('```json:mindmap');
+      if (partialIndex !== -1) {
+        displayContent = m.content.substring(0, partialIndex).trim();
+      }
+    }
+    return { ...m, displayContent };
+  }).filter(Boolean);
+
+  const isSplitMode = themeChosen || Object.keys(mindMapData).length > 0;
 
   return (
-    <main className="app-container">
+    <main className={`app-container ${isSplitMode ? 'split-mode' : ''}`}>
+      {activeModel && (
+        <div style={{ position: 'absolute', top: '10px', right: '20px', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+          Modèle actif : {activeModel}
+        </div>
+      )}
       <header className="app-header glass">
         <div className="header-title">
           <FileText color="#4361ee" />
@@ -191,21 +240,22 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
         </button>
       </header>
 
-      <div className="main-content glass-panel">
-        <div className="chat-container">
-          {visibleMessages.map((m) => (
-            <div key={m.id} className={`message-wrapper ${m.role === 'user' ? 'user' : 'ai'}`}>
-              <div className={`message ${m.role === 'user' ? 'user' : 'ai'}`}>
-                {m.content ? (
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {m.content}
-                  </ReactMarkdown>
-                ) : (
-                  <span className="typing-cursor" />
-                )}
+      <div className={isSplitMode ? 'layout-split' : 'main-content glass-panel'}>
+        <div className="chat-section">
+          <div className="chat-container">
+            {visibleMessages.map((m) => (
+              <div key={m?.id} className={`message-wrapper ${m?.role === 'user' ? 'user' : 'ai'}`}>
+                <div className={`message ${m?.role === 'user' ? 'user' : 'ai'}`}>
+                  {m?.displayContent ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {m.displayContent}
+                    </ReactMarkdown>
+                  ) : (
+                    <span className="typing-cursor" />
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
 
           {/* Theme selector appears after the first assistant message if theme not yet chosen */}
           {!themeChosen && !isLoading && (
@@ -257,6 +307,13 @@ export default function ChatApp({ apiKey }: ChatAppProps) {
             <Send size={20} />
           </button>
         </div>
+        </div>
+
+        {isSplitMode && (
+          <div className="mindmap-section">
+            <MindMap data={mindMapData} />
+          </div>
+        )}
       </div>
     </main>
   );
