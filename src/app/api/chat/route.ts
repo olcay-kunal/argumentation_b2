@@ -65,8 +65,9 @@ PROCESSUS :
 
 3. Une fois le sujet choisi :
    → poser 2 à 5 questions pertinentes pour explorer les enjeux.
+   ⚠️ ATTENDRE la réponse de l'étudiant à ces questions AVANT de passer à la suite. Ne propose pas de problématiques immédiatement.
 
-4. Proposer 3 problématiques conformes aux règles.
+4. APRÈS avoir reçu les réponses de l'étudiant aux questions précédentes, proposer 3 problématiques conformes aux règles basées sur ses réflexions.
 
 5. Si l’étudiant propose une problématique :
    → l’évaluer et la corriger (max 3 ajustements).
@@ -123,6 +124,24 @@ Inclure :
 → produire le compte-rendu avec les données actuelles
 
 ────────────────────────
+EXTRACTION DE DONNÉES (MIND MAP)
+────────────────────────
+À chaque fois qu'un élément structurel est validé ou mis à jour avec l'étudiant (Thème, Sujet, Problématique, ou Arguments du Plan), ajoute obligatoirement à la TOUTE FIN de ton message un bloc JSON formaté exactement comme ceci (remplis les champs connus et mets à jour les existants) :
+
+\`\`\`json:mindmap
+{
+  "theme": "...",
+  "sujet": "...",
+  "problematique": "...",
+  "plan": [
+    { "type": "Partie 1 (ex: Pour)", "arguments": ["..."] },
+    { "type": "Partie 2 (ex: Contre)", "arguments": ["..."] }
+  ]
+}
+\`\`\`
+Ne mets ce bloc qu'une seule fois à la fin de ton message.
+
+────────────────────────
 DÉMARRAGE (OBLIGATOIRE)
 ────────────────────────
 
@@ -158,25 +177,45 @@ export async function POST(req: Request) {
         parts: [{ text: m.content }]
       }));
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:streamGenerateContent?alt=sse&key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: geminiMessages,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2000,
-          }
-        })
-      }
-    );
+    const models = [
+      "gemini-3.1-flash-lite-preview",
+      "gemini-2.5-flash-lite",
+      "gemma-4-31b-it"
+    ];
 
-    if (!geminiRes.ok) {
-      const err = await geminiRes.text();
-      return new Response(JSON.stringify({ error: err }), { status: geminiRes.status });
+    let geminiRes;
+    let usedModel = "";
+
+    for (const model of models) {
+      geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: geminiMessages,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 2000,
+            }
+          })
+        }
+      );
+
+      if (geminiRes.ok) {
+        usedModel = model;
+        break;
+      } else if (geminiRes.status === 429 || geminiRes.status === 503) {
+        continue; // Try the next model
+      } else {
+        break; // Other error, break out
+      }
+    }
+
+    if (!geminiRes || !geminiRes.ok) {
+      const err = geminiRes ? await geminiRes.text() : 'All models failed';
+      return new Response(JSON.stringify({ error: err }), { status: geminiRes ? geminiRes.status : 500 });
     }
 
     // Stream SSE from Gemini, forward as plain text stream to frontend
@@ -212,7 +251,7 @@ export async function POST(req: Request) {
                 const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (text) {
                   // Forward as SSE text chunk
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text, model: usedModel })}\n\n`));
                 }
               } catch {
                 // Skip malformed chunks
